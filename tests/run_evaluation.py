@@ -44,7 +44,7 @@ attacks = [
 ]
 
 lines = []
-lines.append("MEDGUARD TEST RESULTS (all data synthetic, simulated devices only)")
+lines.append("CARESHIELD TEST RESULTS (all data synthetic, simulated devices only)")
 lines.append("=" * 62)
 
 benign_flagged = 0

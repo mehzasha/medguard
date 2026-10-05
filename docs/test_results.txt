@@ -1,4 +1,4 @@
-MEDGUARD TEST RESULTS (all data synthetic, simulated devices only)
+CARESHIELD TEST RESULTS (all data synthetic, simulated devices only)
 ==============================================================
 
 Harmless changes (expected: NOT flagged)

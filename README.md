@@ -1,4 +1,4 @@
-# MedGuard: Passive Medical Device Security Monitor
+# CareShield: Passive Medical Device Security Monitor
 
 **Team:** 404 (group 6)
 **Event:** ASTRA 2026, Cyber in Healthcare
@@ -11,7 +11,7 @@
 Hospitals rely on devices like infusion pumps and ventilators. They often run old software, are hard to update, and sit on the hospital network. An attacker who sends unauthorized commands (for example, changing a dose or pushing fake firmware) could put a patient at risk.
 
 ## Proposed Solution
-MedGuard passively watches device activity, flags suspicious behavior, explains why, and asks a **human** to approve or reject any response. It never blocks or changes a device on its own, because interfering with a medical device could harm a patient.
+CareShield passively watches device activity, flags suspicious behavior, explains why, and asks a **human** to approve or reject any response. It never blocks or changes a device on its own, because interfering with a medical device could harm a patient.
 
 **Flow:** Healthcare Problem -> Cyber Risk -> Detection -> Human Review -> Approved Action -> Patient Protected
 
