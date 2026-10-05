@@ -31,6 +31,9 @@ Simulated devices -> Detector (rules + patient-risk score) -> Alert
 - **Human-in-the-loop:** Approve / Reject buttons for every alert
 - **Audit log** of every human decision
 - Live dashboard with built-in demo attack buttons (simulated devices only)
+- Login with roles: only a **clinician** can approve or reject; an **observer** account is read-only
+- "Are you sure?" confirmation (Cancel is the default) so an accidental click changes nothing
+- Audit log records **who** made each decision
 
 ## Technology Stack
 - Python 3, FastAPI, Uvicorn (backend)
@@ -50,9 +53,19 @@ pip install -r requirements.txt
 ```bash
 uvicorn main:app --reload
 ```
+Then open http://127.0.0.1:8000/login and sign in with a **demo account**:
+
+| Role | Username | Password | Can do |
+|---|---|---|---|
+| Clinician | nurse1 | nurse-demo-123 | View, approve, reject, run demo controls |
+| Observer | viewer1 | viewer-demo-123 | View only |
+
+These are **fake demo credentials for the prototype only**, not real accounts. They can be overridden with the environment variables in `.env.example`.
+
 Then open http://127.0.0.1:8000/ in your browser.
 
 ## Demo Instructions
+0. Sign in as nurse1 (see Usage). Approve and Reject ask for confirmation before saving.
 1. Watch normal traffic flow in the "Live device traffic" table.
 2. Click **Authorized nurse changes rate**. No alert is raised (false-positive check).
 3. Click **Dangerous dose jump**. An alert appears with a risk score and reasons.
@@ -77,6 +90,8 @@ Screenshots: see the `docs/` folder.
 - "Approve response" records the decision and recommended action; it does not control a real device.
 - Data is held in memory and resets when the server restarts.
 - This is a prototype, not a certified medical product.
+- Login is a **demo**: hard-coded accounts, in-memory sessions, no HTTPS, no password hashing. A real deployment needs hospital single sign-on and multi-factor authentication.
+- Sender identification uses IP addresses, which a skilled attacker can spoof. A real system needs device authentication (for example, certificates) and network segmentation.
 
 ## Future Scope
 - Support real medical device protocols (for example, HL7, DICOM) via passive network monitoring

@@ -10,9 +10,13 @@
   *{box-sizing:border-box}
   body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
        background:var(--bg);color:var(--ink)}
-  header{background:var(--brand);color:#fff;padding:16px 24px}
+  header{background:var(--brand);color:#fff;padding:16px 24px;display:flex;
+         justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
   header h1{margin:0;font-size:20px}
   header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  .who{font-size:13px;text-align:right}
+  .who button{margin-left:8px;background:transparent;color:#fff;border-color:#fff}
+  .who button:hover{background:rgba(255,255,255,.15)}
   main{max-width:1100px;margin:0 auto;padding:20px}
   h2{font-size:15px;margin:24px 0 10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
   .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
@@ -30,6 +34,7 @@
   .attack{border-color:var(--bad);color:var(--bad)}
   .safe{border-color:var(--ok);color:var(--ok)}
   .approve{background:var(--ok);color:#fff;border-color:var(--ok)}
+  .approve:hover{background:#188354}
   .reject{background:#fff;color:var(--bad);border-color:var(--bad)}
   .alert{border-left:5px solid var(--bad);margin-bottom:10px}
   .alert.done{border-left-color:var(--muted);opacity:.7}
@@ -41,23 +46,40 @@
   tr.sus td{color:var(--bad);font-weight:600}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
   @media(max-width:800px){.cols{grid-template-columns:1fr}}
+  .readonly{background:#fff8e6;border:1px solid #f0d58a;border-radius:8px;padding:8px 12px;
+            font-size:13px;margin-top:8px}
+  #overlay{position:fixed;inset:0;background:rgba(20,28,40,.55);display:none;
+           align-items:center;justify-content:center;z-index:10;padding:16px}
+  #overlay.show{display:flex}
+  #modal{background:#fff;border-radius:12px;padding:22px;max-width:440px;width:100%}
+  #modal h3{margin:0 0 8px;font-size:17px}
+  #modal p{margin:6px 0;font-size:14px}
+  #modal .btns{margin-top:16px;justify-content:flex-end}
+  #cancelBtn{border-color:var(--brand);color:var(--brand);font-weight:600}
 </style>
 </head>
 <body>
 <header>
-  <h1>MedGuard &mdash; Medical Device Security Monitor</h1>
-  <p>Passive monitoring &bull; Human-approved response &bull; All devices and data are simulated</p>
+  <div>
+    <h1>MedGuard &mdash; Medical Device Security Monitor</h1>
+    <p>Passive monitoring &bull; Human-approved response &bull; All devices and data are simulated</p>
+  </div>
+  <div class="who"><span id="whoText"></span><button onclick="signOut()">Sign out</button></div>
 </header>
 <main>
+  <div id="roleNote"></div>
+
   <h2>Devices</h2>
   <div class="grid" id="devices"></div>
 
-  <h2>Demo controls (simulated attacks on fake devices only)</h2>
-  <div class="card btns">
-    <button class="safe" onclick="attack('nurse_change')">Authorized nurse changes rate</button>
-    <button class="attack" onclick="attack('unknown_sender')">Unknown sender</button>
-    <button class="attack" onclick="attack('dose_jump')">Dangerous dose jump</button>
-    <button class="attack" onclick="attack('firmware')">Firmware tampering</button>
+  <div id="controlsWrap">
+    <h2>Demo controls (simulated attacks on fake devices only)</h2>
+    <div class="card btns">
+      <button class="safe" onclick="attack('nurse_change')">Authorized nurse changes rate</button>
+      <button class="attack" onclick="attack('unknown_sender')">Unknown sender</button>
+      <button class="attack" onclick="attack('dose_jump')">Dangerous dose jump</button>
+      <button class="attack" onclick="attack('firmware')">Firmware tampering</button>
+    </div>
   </div>
 
   <h2>Alerts needing human review</h2>
@@ -75,21 +97,74 @@
   </div>
 </main>
 
+<div id="overlay">
+  <div id="modal" role="dialog" aria-modal="true">
+    <h3 id="mTitle"></h3>
+    <p id="mBody"></p>
+    <p class="muted">This decision will be recorded in the audit log under your name.</p>
+    <div class="btns">
+      <button id="cancelBtn" onclick="closeModal()">Cancel</button>
+      <button id="confirmBtn" onclick="confirmDecision()">Confirm</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
+let me = null, pending = null;
 let lastAlerts = "", lastDevices = "", lastAudit = "";
+let alertsData = [];
+
+function toLogin(){ window.location = "/login"; }
+
+async function signOut(){
+  await fetch("/api/logout", {method:"POST"});
+  toLogin();
+}
 
 async function attack(kind){
-  await fetch("/api/attack/" + kind, {method:"POST"});
-  refresh();
-}
-async function decide(id, decision){
-  await fetch("/api/decide/" + id + "/" + decision, {method:"POST"});
+  const r = await fetch("/api/attack/" + kind, {method:"POST"});
+  if(r.status === 401) return toLogin();
+  if(r.status === 403) alert("Only clinicians can run demo controls.");
   refresh();
 }
 
+/* ---- Confirmation step: nothing happens until the user confirms ---- */
+function askDecide(id, decision){
+  const a = alertsData.find(x => x.id === id);
+  if(!a) return;
+  pending = {id, decision};
+  const approve = decision === "approve";
+  document.getElementById("mTitle").textContent =
+    approve ? "Approve the protective response?" : "Reject this alert as a false alarm?";
+  document.getElementById("mBody").textContent =
+    approve
+      ? `Alert #${a.id} on ${a.device_name} (risk ${a.risk_score}/100). Approving confirms this is a real threat and carries out: ${a.recommended}.`
+      : `Alert #${a.id} on ${a.device_name} (risk ${a.risk_score}/100). Rejecting marks this as a false alarm and takes NO protective action.`;
+  const c = document.getElementById("confirmBtn");
+  c.className = approve ? "approve" : "reject";
+  c.textContent = approve ? "Yes, approve" : "Yes, reject";
+  document.getElementById("overlay").classList.add("show");
+  document.getElementById("cancelBtn").focus();  // safe default: Cancel
+}
+function closeModal(){
+  pending = null;
+  document.getElementById("overlay").classList.remove("show");
+}
+async function confirmDecision(){
+  if(!pending) return;
+  const {id, decision} = pending;
+  closeModal();
+  const r = await fetch("/api/decide/" + id + "/" + decision, {method:"POST"});
+  if(r.status === 401) return toLogin();
+  if(r.status === 403) alert("Only clinicians can approve or reject alerts.");
+  refresh();
+}
+document.addEventListener("keydown", e => { if(e.key === "Escape") closeModal(); });
+
+/* ---- Rendering ---- */
 function renderDevices(list){
   document.getElementById("devices").innerHTML = list.map(d => `
     <div class="card dev ${d.status}">
@@ -103,6 +178,7 @@ function renderDevices(list){
 function renderAlerts(list){
   const el = document.getElementById("alerts");
   if(!list.length){ el.innerHTML = '<div class="card muted">No alerts. All devices behaving normally.</div>'; return; }
+  const canDecide = me && me.role === "clinician";
   el.innerHTML = list.map(a => `
     <div class="card alert ${a.status==="pending" ? "" : "done"}">
       <span class="score">${esc(a.risk_score)}/100</span>
@@ -112,8 +188,10 @@ function renderAlerts(list){
       <ul>${a.reasons.map(r => "<li>"+esc(r)+"</li>").join("")}</ul>
       <div class="rec"><strong>Recommended action:</strong> ${esc(a.recommended)}</div>
       ${a.status==="pending"
-        ? `<div class="btns"><button class="approve" onclick="decide(${a.id},'approve')">Approve response</button>
-           <button class="reject" onclick="decide(${a.id},'reject')">Reject (false alarm)</button></div>`
+        ? (canDecide
+            ? `<div class="btns"><button class="approve" onclick="askDecide(${a.id},'approve')">Approve response</button>
+               <button class="reject" onclick="askDecide(${a.id},'reject')">Reject (false alarm)</button></div>`
+            : `<div class="muted"><strong>Awaiting a clinician's decision (read-only account)</strong></div>`)
         : `<div class="muted"><strong>Status: ${esc(a.status.toUpperCase())}</strong></div>`}
     </div>`).join("");
 }
@@ -127,15 +205,18 @@ function renderEvents(list){
 
 function renderAudit(list){
   document.getElementById("audit").innerHTML = list.length
-    ? "<tr><th>Time</th><th>Alert</th><th>Decision</th><th>Note</th></tr>" +
+    ? "<tr><th>Time</th><th>Alert</th><th>Decision</th><th>By</th><th>Note</th></tr>" +
       list.map(a => `<tr><td>${esc(a.time)}</td><td>#${esc(a.alert_id)}</td>
-        <td>${esc(a.decision)}</td><td>${esc(a.note)}</td></tr>`).join("")
+        <td>${esc(a.decision)}</td><td>${esc(a.user)}</td><td>${esc(a.note)}</td></tr>`).join("")
     : '<tr><td class="muted">No decisions yet.</td></tr>';
 }
 
 async function refresh(){
   try{
-    const s = await (await fetch("/api/state")).json();
+    const res = await fetch("/api/state");
+    if(res.status === 401) return toLogin();
+    const s = await res.json();
+    alertsData = s.alerts;
     const d = JSON.stringify(s.devices), a = JSON.stringify(s.alerts), u = JSON.stringify(s.audit);
     if(d !== lastDevices){ lastDevices = d; renderDevices(s.devices); }
     if(a !== lastAlerts){ lastAlerts = a; renderAlerts(s.alerts); }
@@ -143,8 +224,21 @@ async function refresh(){
     renderEvents(s.events);
   }catch(e){ console.log("waiting for server...", e); }
 }
-refresh();
-setInterval(refresh, 1000);
+
+async function init(){
+  const r = await fetch("/api/me");
+  if(!r.ok) return toLogin();
+  me = await r.json();
+  document.getElementById("whoText").textContent = "Signed in: " + me.display + " (" + me.username + ")";
+  if(me.role !== "clinician"){
+    document.getElementById("controlsWrap").style.display = "none";
+    document.getElementById("roleNote").innerHTML =
+      '<div class="readonly">You are signed in with a read-only account. You can watch alerts but only clinicians can approve or reject them.</div>';
+  }
+  refresh();
+  setInterval(refresh, 1000);
+}
+init();
 </script>
 </body>
 </html>
