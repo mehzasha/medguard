@@ -1,0 +1,24 @@
+MEDGUARD TEST RESULTS (all data synthetic, simulated devices only)
+==============================================================
+
+Harmless changes (expected: NOT flagged)
+  ok           Nurse sets pump-01 to 80
+  ok           Nurse sets pump-01 to 70
+  ok           Nurse sets pump-02 to 45
+  ok           Nurse sets pump-02 to 35
+  ok           Nurse sets vent-01 to 16
+
+Simulated attacks (expected: flagged)
+  CAUGHT       Unknown sender to pump-02
+  CAUGHT       Unknown sender to vent-01
+  CAUGHT       Dose jump to 400 from unknown sender
+  CAUGHT       Unsafe dose 300 from an allowed IP
+  CAUGHT       Sudden jump 40 to 70 from an allowed IP
+  CAUGHT       Firmware update on pump-01
+  CAUGHT       Firmware update on vent-01 from unknown IP
+  CAUGHT       Ventilator rate 40 (above safe limit)
+
+SUMMARY
+  Normal readings flagged:    0 / 50
+  Harmless changes flagged:   0 / 5
+  Attacks detected:           8 / 8

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MedGuard</title>
+<style>
+  :root{--bg:#f4f6f9;--card:#fff;--ink:#1b2430;--muted:#6b7686;--line:#e3e8ef;
+        --ok:#1f9d63;--bad:#d64545;--warn:#e8a317;--brand:#1f4e8c}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+       background:var(--bg);color:var(--ink)}
+  header{background:var(--brand);color:#fff;padding:16px 24px}
+  header h1{margin:0;font-size:20px}
+  header p{margin:4px 0 0;font-size:13px;opacity:.85}
+  main{max-width:1100px;margin:0 auto;padding:20px}
+  h2{font-size:15px;margin:24px 0 10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .dev .top{display:flex;justify-content:space-between;align-items:center}
+  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px}
+  .OK .dot{background:var(--ok)} .ALERT .dot{background:var(--bad)}
+  .ALERT{border-color:var(--bad);background:#fff5f5}
+  .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:#eef2f7;color:var(--muted)}
+  .muted{color:var(--muted);font-size:13px}
+  .btns{display:flex;flex-wrap:wrap;gap:8px}
+  button{font:inherit;font-size:13px;border:1px solid var(--line);background:#fff;border-radius:8px;
+         padding:8px 12px;cursor:pointer}
+  button:hover{background:#eef2f7}
+  .attack{border-color:var(--bad);color:var(--bad)}
+  .safe{border-color:var(--ok);color:var(--ok)}
+  .approve{background:var(--ok);color:#fff;border-color:var(--ok)}
+  .reject{background:#fff;color:var(--bad);border-color:var(--bad)}
+  .alert{border-left:5px solid var(--bad);margin-bottom:10px}
+  .alert.done{border-left-color:var(--muted);opacity:.7}
+  .score{float:right;font-weight:700;font-size:18px;color:var(--bad)}
+  .alert ul{margin:8px 0;padding-left:18px;font-size:14px}
+  .rec{font-size:13px;background:#eef6ff;border-radius:6px;padding:8px;margin:8px 0}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  td,th{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+  tr.sus td{color:var(--bad);font-weight:600}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media(max-width:800px){.cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>MedGuard &mdash; Medical Device Security Monitor</h1>
+  <p>Passive monitoring &bull; Human-approved response &bull; All devices and data are simulated</p>
+</header>
+<main>
+  <h2>Devices</h2>
+  <div class="grid" id="devices"></div>
+
+  <h2>Demo controls (simulated attacks on fake devices only)</h2>
+  <div class="card btns">
+    <button class="safe" onclick="attack('nurse_change')">Authorized nurse changes rate</button>
+    <button class="attack" onclick="attack('unknown_sender')">Unknown sender</button>
+    <button class="attack" onclick="attack('dose_jump')">Dangerous dose jump</button>
+    <button class="attack" onclick="attack('firmware')">Firmware tampering</button>
+  </div>
+
+  <h2>Alerts needing human review</h2>
+  <div id="alerts"></div>
+
+  <div class="cols">
+    <div>
+      <h2>Live device traffic</h2>
+      <div class="card"><table id="events"></table></div>
+    </div>
+    <div>
+      <h2>Audit log (human decisions)</h2>
+      <div class="card"><table id="audit"></table></div>
+    </div>
+  </div>
+</main>
+
+<script>
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+let lastAlerts = "", lastDevices = "", lastAudit = "";
+
+async function attack(kind){
+  await fetch("/api/attack/" + kind, {method:"POST"});
+  refresh();
+}
+async function decide(id, decision){
+  await fetch("/api/decide/" + id + "/" + decision, {method:"POST"});
+  refresh();
+}
+
+function renderDevices(list){
+  document.getElementById("devices").innerHTML = list.map(d => `
+    <div class="card dev ${d.status}">
+      <div class="top"><strong><span class="dot"></span>${esc(d.status)}</strong>
+        <span class="badge">${esc(d.patient_risk)} risk patient</span></div>
+      <div style="margin-top:6px">${esc(d.name)}</div>
+      <div class="muted">${esc(d.id)} &bull; ${esc(d.patient_id)}</div>
+    </div>`).join("");
+}
+
+function renderAlerts(list){
+  const el = document.getElementById("alerts");
+  if(!list.length){ el.innerHTML = '<div class="card muted">No alerts. All devices behaving normally.</div>'; return; }
+  el.innerHTML = list.map(a => `
+    <div class="card alert ${a.status==="pending" ? "" : "done"}">
+      <span class="score">${esc(a.risk_score)}/100</span>
+      <strong>${esc(a.device_name)}</strong> &bull; ${esc(a.patient_id)}
+      <span class="badge">${esc(a.patient_risk)} risk patient</span>
+      <div class="muted">${esc(a.time)} &bull; from ${esc(a.source_ip)} &bull; action: ${esc(a.action)}${a.rate!=null ? " &bull; rate: "+esc(a.rate) : ""}</div>
+      <ul>${a.reasons.map(r => "<li>"+esc(r)+"</li>").join("")}</ul>
+      <div class="rec"><strong>Recommended action:</strong> ${esc(a.recommended)}</div>
+      ${a.status==="pending"
+        ? `<div class="btns"><button class="approve" onclick="decide(${a.id},'approve')">Approve response</button>
+           <button class="reject" onclick="decide(${a.id},'reject')">Reject (false alarm)</button></div>`
+        : `<div class="muted"><strong>Status: ${esc(a.status.toUpperCase())}</strong></div>`}
+    </div>`).join("");
+}
+
+function renderEvents(list){
+  document.getElementById("events").innerHTML =
+    "<tr><th>Time</th><th>Device</th><th>From</th><th>Action</th><th>Rate</th></tr>" +
+    list.map(e => `<tr class="${e.suspicious?"sus":""}"><td>${esc(e.time)}</td><td>${esc(e.device)}</td>
+      <td>${esc(e.source_ip)}</td><td>${esc(e.action)}</td><td>${esc(e.rate ?? "-")}</td></tr>`).join("");
+}
+
+function renderAudit(list){
+  document.getElementById("audit").innerHTML = list.length
+    ? "<tr><th>Time</th><th>Alert</th><th>Decision</th><th>Note</th></tr>" +
+      list.map(a => `<tr><td>${esc(a.time)}</td><td>#${esc(a.alert_id)}</td>
+        <td>${esc(a.decision)}</td><td>${esc(a.note)}</td></tr>`).join("")
+    : '<tr><td class="muted">No decisions yet.</td></tr>';
+}
+
+async function refresh(){
+  try{
+    const s = await (await fetch("/api/state")).json();
+    const d = JSON.stringify(s.devices), a = JSON.stringify(s.alerts), u = JSON.stringify(s.audit);
+    if(d !== lastDevices){ lastDevices = d; renderDevices(s.devices); }
+    if(a !== lastAlerts){ lastAlerts = a; renderAlerts(s.alerts); }
+    if(u !== lastAudit){ lastAudit = u; renderAudit(s.audit); }
+    renderEvents(s.events);
+  }catch(e){ console.log("waiting for server...", e); }
+}
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
